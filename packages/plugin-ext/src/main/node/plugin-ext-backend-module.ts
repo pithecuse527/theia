@@ -32,6 +32,7 @@ import { HttpPluginDeployerResolver } from './plugin-http-resolver';
 import { ConnectionHandler, JsonRpcConnectionHandler } from '@theia/core';
 import { PluginPathsService, pluginPathsServicePath } from '../common/plugin-paths-protocol';
 import { PluginPathsServiceImpl } from './paths/plugin-paths-service';
+import { PluginServerHandler } from './plugin-server-handler';
 
 export function bindMainBackend(bind: interfaces.Bind): void {
     bind(PluginApiContribution).toSelf().inSingletonScope();
@@ -48,12 +49,11 @@ export function bindMainBackend(bind: interfaces.Bind): void {
     bind(PluginDeployerFileHandler).to(PluginTheiaFileHandler).inSingletonScope();
     bind(PluginDeployerDirectoryHandler).to(PluginTheiaDirectoryHandler).inSingletonScope();
 
-    bind(PluginServer).to(PluginDeployerImpl).inSingletonScope();
+    bind(PluginServer).to(PluginServerHandler).inSingletonScope();
 
     bind(PluginsKeyValueStorage).toSelf().inSingletonScope();
 
     bind(PluginPathsService).to(PluginPathsServiceImpl).inSingletonScope();
-    bind(PluginPathsServiceImpl).toSelf().inSingletonScope();
     bind(ConnectionHandler).toDynamicValue(ctx =>
         new JsonRpcConnectionHandler(pluginPathsServicePath, () =>
             ctx.container.get(PluginPathsService)

@@ -25,6 +25,7 @@ import { MonacoQuickOpenService } from '@theia/monaco/lib/browser/monaco-quick-o
 import { FileStat } from '@theia/filesystem/lib/common';
 import { FileSearchService } from '@theia/file-search/lib/common/file-search-service';
 import URI from '@theia/core/lib/common/uri';
+import { WorkspaceService } from '@theia/workspace/lib/browser';
 import { Resource } from '@theia/core/lib/common/resource';
 import { Emitter, Event, Disposable, ResourceResolver } from '@theia/core';
 import { FileWatcherSubscriberOptions } from '../../api/model';
@@ -50,6 +51,10 @@ export class WorkspaceMainImpl implements WorkspaceMain {
 
     private pluginServer: PluginServer;
 
+    private workspaceService: WorkspaceService;
+
+    private storagePathService: StoragePathService;
+
     constructor(rpc: RPCProtocol, container: interfaces.Container) {
         this.proxy = rpc.getProxy(MAIN_RPC_CONTEXT.WORKSPACE_EXT);
         this.storageProxy = rpc.getProxy(MAIN_RPC_CONTEXT.STORAGE_EXT);
@@ -57,26 +62,29 @@ export class WorkspaceMainImpl implements WorkspaceMain {
         this.fileSearchService = container.get(FileSearchService);
         this.resourceResolver = container.get(TextContentResourceResolver);
         this.pluginServer = container.get(PluginServer);
-        const storagePathService = container.get(StoragePathService);
+        this.workspaceService = container.get(WorkspaceService);
+        this.storagePathService = container.get(StoragePathService);
 
         this.inPluginFileSystemWatcherManager = new InPluginFileSystemWatcherManager(this.proxy, container);
 
-        // Plugin Context `storagePath` should be already updated when API event `onDidChangeWorkspaceFolders` fires.
-        // This is why `StoragePathService.onWorkspaceChanged` is used instead of `WorkspaceService.onWorkspaceChanged`.
-        storagePathService.onWorkspaceChanged(roots => {
-            this.notifyWorkspaceFoldersChanged(roots);
+        this.workspaceService.onWorkspaceChanged(roots => {
+            this.processWorkspaceFoldersChanged(roots);
         });
     }
 
-    notifyWorkspaceFoldersChanged(roots: FileStat[]): void {
+    async processWorkspaceFoldersChanged(roots: FileStat[]): Promise<void> {
+        console.log('>>>>>> WS Folder Changed');
         if (this.isAnyRootChanged(roots) === false) {
             return;
         }
-
         this.roots = roots;
-        this.proxy.$onWorkspaceFoldersChanged({ roots });
 
-        this.pluginServer.keyValueStorageGetAll(false).then(data => this.storageProxy.updatePluginsDataForWorkspace(data));
+        await this.storagePathService.updateStoragePath(roots);
+
+        const keyValueStorageWorkspacesData = await this.pluginServer.keyValueStorageGetAll(false);
+        this.storageProxy.updatePluginsWorkspaceData(keyValueStorageWorkspacesData);
+
+        this.proxy.$onWorkspaceFoldersChanged({ roots });
     }
 
     private isAnyRootChanged(roots: FileStat[]): boolean {

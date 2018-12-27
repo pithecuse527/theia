@@ -17,7 +17,7 @@
 import { interfaces } from 'inversify';
 import { StorageMain } from '../../api/plugin-api';
 import { PluginServer } from '../../common/plugin-protocol';
-import { KeysToAnyValues } from '../../common/types';
+import { KeysToAnyValues, KeysToKeysToAnyValue } from '../../common/types';
 
 export class StorageMainImpl implements StorageMain {
 
@@ -33,6 +33,10 @@ export class StorageMainImpl implements StorageMain {
 
     $get(key: string, isGlobal: boolean): Promise<KeysToAnyValues> {
         return this.pluginServer.keyValueStorageGet(key, isGlobal);
+    }
+
+    $getAll(isGlobal: boolean): Promise<KeysToKeysToAnyValue> {
+        return this.pluginServer.keyValueStorageGetAll(isGlobal);
     }
 
 }

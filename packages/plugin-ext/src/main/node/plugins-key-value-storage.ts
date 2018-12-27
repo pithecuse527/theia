@@ -17,22 +17,54 @@
 import { injectable, inject } from 'inversify';
 import * as fs from 'fs';
 import * as path from 'path';
-import { WorkspaceService } from '@theia/workspace/src/browser/workspace-service';
+import { Deferred } from '@theia/core/lib/common/promise-util';
 import { PluginPaths } from './paths/const';
-import { PluginPathsServiceImpl } from './paths/plugin-paths-service';
+import { PluginPathsService } from '../common/plugin-paths-protocol';
 import { KeysToAnyValues, KeysToKeysToAnyValue } from '../../common/types';
 
 @injectable()
 export class PluginsKeyValueStorage {
-    @inject(WorkspaceService)
-    private readonly workspaceService: WorkspaceService;
-    @inject(PluginPathsServiceImpl)
-    private readonly pluginPathsService: PluginPathsServiceImpl;
-
     private theiaDirPath: string | undefined;
+    private globalDataPath: string | undefined;
+
+    private deferredTheiaDirPath: Deferred<string>;
+
+    constructor(
+        @inject(PluginPathsService) private readonly pluginPathsService: PluginPathsService
+    ) {
+        this.deferredTheiaDirPath = new Deferred<string>();
+
+        this.pluginPathsService.getTheiaDirPath().then((theiaDirPath: string) => {
+            this.theiaDirPath = theiaDirPath;
+            this.globalDataPath = path.join(this.theiaDirPath, PluginPaths.PLUGINS_GLOBAL_STORAGE_DIR, 'global-state.json');
+
+            if (!fs.existsSync(path.dirname(this.globalDataPath))) {
+                this.createDirectories(path.dirname(this.globalDataPath));
+            }
+
+            this.deferredTheiaDirPath.resolve(theiaDirPath);
+        });
+    }
+
+    private createDirectories(pathString: string): void {
+        const toCreate = [];
+
+        while (!fs.existsSync(pathString)) {
+            toCreate.push(path.basename(pathString));
+            pathString = path.dirname(pathString);
+        }
+
+        while (toCreate.length > 0) {
+            fs.mkdirSync(toCreate.pop()!);
+        }
+    }
 
     async set(key: string, value: KeysToAnyValues, isGlobal: boolean): Promise<boolean> {
         const dataPath = await this.getDataPath(isGlobal);
+        if (!dataPath) {
+            return Promise.reject('Cannot save data: no opened workspace');
+        }
+
         const data = this.readFromFile(dataPath);
 
         if (value === undefined || value === {}) {
@@ -47,34 +79,43 @@ export class PluginsKeyValueStorage {
 
     async get(key: string, isGlobal: boolean): Promise<KeysToAnyValues> {
         const dataPath = await this.getDataPath(isGlobal);
+        if (!dataPath) {
+            return Promise.resolve({});
+        }
+
         const data = this.readFromFile(dataPath);
         return Promise.resolve(data[key]);
     }
 
     async getAll(isGlobal: boolean): Promise<KeysToKeysToAnyValue> {
         const dataPath = await this.getDataPath(isGlobal);
+        if (!dataPath) {
+            return Promise.resolve({});
+        }
+
         const data = this.readFromFile(dataPath);
         return Promise.resolve(data);
     }
 
-    private async getDataPath(isGlobal: boolean): Promise<string> {
+    private async getDataPath(isGlobal: boolean): Promise<string | undefined> {
         if (this.theiaDirPath === undefined) {
-            this.theiaDirPath = await this.pluginPathsService.getTheiaDirPath();
+            // wait for Theia data directory path if it hasn't been initialized yet
+            await this.deferredTheiaDirPath.promise;
         }
 
         if (isGlobal) {
-            return path.join(this.theiaDirPath, PluginPaths.PLUGINS_GLOBAL_STORAGE_DIR, 'global-state.json');
+            return this.globalDataPath!;
         } else {
-            return path.join(
-                await this.pluginPathsService.provideHostStoragePath(
-                    this.workspaceService.workspace!,
-                    await this.workspaceService.roots
-                ),
-                'workspace-state.json');
+            const storagePath = await this.pluginPathsService.getLastStoragePath();
+            return storagePath ? path.join(storagePath, 'workspace-state.json') : undefined;
         }
     }
 
     private readFromFile(pathToFile: string): KeysToKeysToAnyValue {
+        if (!fs.existsSync(pathToFile)) {
+            return {};
+        }
+
         const rawData = fs.readFileSync(pathToFile, 'utf8');
         try {
             return JSON.parse(rawData);
@@ -85,6 +126,10 @@ export class PluginsKeyValueStorage {
     }
 
     private writeToFile(pathToFile: string, data: KeysToKeysToAnyValue): void {
+        if (!fs.existsSync(path.dirname(pathToFile))) {
+            fs.mkdirSync(path.dirname(pathToFile));
+        }
+
         const rawData = JSON.stringify(data);
         fs.writeFileSync(pathToFile, rawData, 'utf8');
     }

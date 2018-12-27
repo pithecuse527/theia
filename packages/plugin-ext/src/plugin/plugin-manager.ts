@@ -69,12 +69,7 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
         private readonly envExt: EnvExtImpl,
         private readonly preferencesManager: PreferenceRegistryExtImpl,
         private readonly rpc: RPCProtocol
-    ) {
-        this.storageProxy = rpc.set(
-            MAIN_RPC_CONTEXT.STORAGE_EXT,
-            new KeyValueStorageProxy(this.rpc.getProxy(PLUGIN_RPC_CONTEXT.STORAGE_MAIN))
-        );
-    }
+    ) { }
 
     $stopPlugin(contextPath: string): PromiseLike<void> {
         this.activatedPlugins.forEach(plugin => {
@@ -92,6 +87,13 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
     }
 
     $init(pluginInit: PluginInitData, configStorage: ConfigStorage): PromiseLike<void> {
+        this.storageProxy = this.rpc.set(
+            MAIN_RPC_CONTEXT.STORAGE_EXT,
+            new KeyValueStorageProxy(this.rpc.getProxy(PLUGIN_RPC_CONTEXT.STORAGE_MAIN),
+                                     pluginInit.globalState,
+                                     pluginInit.workspaceState)
+        );
+
         // init query parameters
         this.envExt.setQueryParameters(pluginInit.env.queryParams);
 
@@ -110,6 +112,7 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
         for (const plugin of plugins) {
             this.registry.set(plugin.model.id, plugin);
         }
+
         // run plugins
         for (const plugin of plugins) {
             const pluginMain = this.host.loadPlugin(plugin);
@@ -124,9 +127,9 @@ export class PluginManagerExtImpl implements PluginManagerExt, PluginManager {
         return Promise.resolve();
     }
 
-    $updateStoragePath(path: string): PromiseLike<void> {
+    $updateStoragePath(path: string | undefined): PromiseLike<void> {
         this.pluginContextsMap.forEach((pluginContext: theia.PluginContext, pluginId: string) => {
-            pluginContext.storagePath = join(path, pluginId);
+            pluginContext.storagePath = path ? join(path, pluginId) : undefined;
         });
         return Promise.resolve();
     }

@@ -28,10 +28,9 @@ export class Memento implements theia.Memento {
         private readonly isPluginGlobalData: boolean,
         private readonly storage: KeyValueStorageProxy
     ) {
-        this.cache = {};
-        this.storage.getPerPluginData(pluginId, this.isPluginGlobalData).then(savedData => this.cache = savedData);
+        this.cache = storage.getPerPluginData(pluginId, isPluginGlobalData);
 
-        if (this.isPluginGlobalData) {
+        if (!this.isPluginGlobalData) {
             this.storage.storageDataChangedEvent((data: KeysToKeysToAnyValue) => {
                 this.cache = data[this.pluginId];
             });
@@ -64,20 +63,45 @@ export class KeyValueStorageProxy implements StorageExt {
     private storageDataChangedEmitter = new Emitter<KeysToKeysToAnyValue>();
     public readonly storageDataChangedEvent: Event<KeysToKeysToAnyValue> = this.storageDataChangedEmitter.event;
 
+    private readonly proxy: StorageMain;
+
+    private globalDataCache: KeysToKeysToAnyValue;
+    private workspaceDataCache: KeysToKeysToAnyValue;
+
     constructor(
-        private readonly proxy: StorageMain
-    ) { }
+        proxy: StorageMain,
+        initGlobalData: KeysToKeysToAnyValue,
+        initWorkspaceData: KeysToKeysToAnyValue
+    ) {
+        this.proxy = proxy;
 
-    getPerPluginData(key: string, scope: boolean): Promise<KeysToAnyValues> {
-        return this.proxy.$get(key, scope);
+        this.globalDataCache = initGlobalData;
+        this.workspaceDataCache = initWorkspaceData;
     }
 
-    setPerPluginData(key: string, value: KeysToAnyValues, scope: boolean): Promise<boolean> {
-        return this.proxy.$set(key, value, scope);
+    getPerPluginData(key: string, isGlobal: boolean): KeysToAnyValues {
+        if (isGlobal) {
+            const existed = this.globalDataCache[key];
+            return existed ? existed : {};
+        } else {
+            const existed = this.workspaceDataCache[key];
+            return existed ? existed : {};
+        }
     }
 
-    updatePluginsDataForWorkspace(data: KeysToKeysToAnyValue): void {
-        this.storageDataChangedEmitter.fire(data);
+    setPerPluginData(key: string, value: KeysToAnyValues, isGlobal: boolean): Promise<boolean> {
+        if (isGlobal) {
+            this.globalDataCache[key] = value;
+        } else {
+            this.workspaceDataCache[key] = value;
+        }
+
+        return this.proxy.$set(key, value, isGlobal);
+    }
+
+    updatePluginsWorkspaceData(workspaceData: KeysToKeysToAnyValue): void {
+        this.workspaceDataCache = workspaceData;
+        this.storageDataChangedEmitter.fire(workspaceData);
     }
 
 }

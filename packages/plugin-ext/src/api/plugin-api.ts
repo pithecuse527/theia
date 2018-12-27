@@ -59,6 +59,8 @@ import { CancellationToken, Progress, ProgressOptions } from '@theia/plugin';
 export interface PluginInitData {
     plugins: PluginMetadata[];
     preferences: { [key: string]: any };
+    globalState: KeysToKeysToAnyValue;
+    workspaceState: KeysToKeysToAnyValue;
     env: EnvInit;
     extApi?: ExtPluginApi[];
 }
@@ -137,7 +139,7 @@ export interface PluginManagerExt {
 
     $init(pluginInit: PluginInitData, configStorage: ConfigStorage): PromiseLike<void>;
 
-    $updateStoragePath(path: string): PromiseLike<void>;
+    $updateStoragePath(path: string | undefined): PromiseLike<void>;
 }
 
 export interface CommandRegistryMain {
@@ -907,10 +909,11 @@ export interface WebviewsMain {
 export interface StorageMain {
     $set(key: string, value: KeysToAnyValues, isGlobal: boolean): Promise<boolean>;
     $get(key: string, isGlobal: boolean): Promise<KeysToAnyValues>;
+    $getAll(isGlobal: boolean): Promise<KeysToKeysToAnyValue>;
 }
 
 export interface StorageExt {
-    updatePluginsDataForWorkspace(data: KeysToKeysToAnyValue): void;
+    updatePluginsWorkspaceData(data: KeysToKeysToAnyValue): void;
 }
 
 export const PLUGIN_RPC_CONTEXT = {

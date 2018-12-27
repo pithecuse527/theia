@@ -37,11 +37,11 @@ export class PluginServerHandler implements PluginServer {
         return this.pluginsKeyValueStorage.set(key, value, isGlobal);
     }
 
-   keyValueStorageGet(key: string, isGlobal: boolean): Promise<KeysToAnyValues> {
+    keyValueStorageGet(key: string, isGlobal: boolean): Promise<KeysToAnyValues> {
         return this.pluginsKeyValueStorage.get(key, isGlobal);
     }
 
-  keyValueStorageGetAll(isGlobal: boolean = false): Promise<KeysToKeysToAnyValue> {
+    keyValueStorageGetAll(isGlobal: boolean = false): Promise<KeysToKeysToAnyValue> {
         return this.pluginsKeyValueStorage.getAll(isGlobal);
     }
 
